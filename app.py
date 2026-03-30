@@ -430,6 +430,24 @@ def inject_custom_styles() -> None:
             font-weight: 700;
         }
 
+        [data-testid="stTable"] tbody tr {
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        [data-testid="stTable"] td {
+            color: var(--ink) !important;
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        [data-testid="stTable"] tbody td p,
+        [data-testid="stTable"] tbody td div,
+        [data-testid="stTable"] tbody td span,
+        [data-testid="stTable"] thead th p,
+        [data-testid="stTable"] thead th div,
+        [data-testid="stTable"] thead th span {
+            color: var(--ink) !important;
+        }
+
         [data-testid="stTable"] td, [data-testid="stTable"] th {
             border: none;
             padding: 0.65rem 0.75rem;
