@@ -1029,12 +1029,100 @@ def find_comparables(dataframe: pd.DataFrame, property_row: pd.Series, limit: in
     return comparables.head(limit)
 
 
+def interpolate_score(
+    value: float,
+    input_min: float,
+    input_max: float,
+    score_min: float,
+    score_max: float,
+) -> float:
+    clipped = float(np.clip(value, input_min, input_max))
+    return float(np.interp(clipped, [input_min, input_max], [score_min, score_max]))
+
+
 def classify_pricing(price_gap_pct: float) -> str:
     if price_gap_pct > 3:
         return "Surcote"
     if price_gap_pct < -3:
         return "Décote"
     return "Prix globalement aligné"
+
+
+def classify_investment_score(score: float) -> str:
+    if score >= 80:
+        return "Très attractif"
+    if score >= 65:
+        return "Attractif"
+    if score >= 50:
+        return "À surveiller"
+    return "Peu attractif"
+
+
+def compute_investment_score(
+    property_row: pd.Series,
+    comparables: pd.DataFrame,
+    price_gap_pct: float,
+) -> dict[str, object]:
+    comp_mean_ppsf = comparables["price_per_sqft"].mean()
+    ppsf_gap_pct = (
+        ((property_row["price_per_sqft"] - comp_mean_ppsf) / comp_mean_ppsf) * 100
+        if comp_mean_ppsf
+        else 0.0
+    )
+    grade_delta = float(property_row["grade"] - comparables["grade"].mean())
+    condition_delta = float(property_row["condition"] - comparables["condition"].mean())
+
+    component_scores = {
+        "Prix vs comps": round(interpolate_score(price_gap_pct, -15, 15, 32, 0), 1),
+        "Prix/pi² vs comps": round(interpolate_score(ppsf_gap_pct, -15, 15, 24, 0), 1),
+        "Grade": round(interpolate_score(grade_delta, -2, 2, 4, 14), 1),
+        "Condition": round(interpolate_score(condition_delta, -1.5, 1.5, 2, 10), 1),
+        "Rénovation": 10.0 if property_row["is_renovated"] else 4.0,
+        "Front de mer": 10.0 if property_row["waterfront"] == 1 else 4.0,
+    }
+    total_score = round(sum(component_scores.values()))
+    score_label = classify_investment_score(total_score)
+
+    detail_rows = [
+        {
+            "Facteur": "Prix vs comparables",
+            "Score": f"{component_scores['Prix vs comps']:.1f}/32",
+            "Lecture": f"{price_gap_pct:+.1f}% vs prix moyen des comps",
+        },
+        {
+            "Facteur": "Prix par pi² vs comparables",
+            "Score": f"{component_scores['Prix/pi² vs comps']:.1f}/24",
+            "Lecture": f"{ppsf_gap_pct:+.1f}% vs prix/pi² des comps",
+        },
+        {
+            "Facteur": "Grade",
+            "Score": f"{component_scores['Grade']:.1f}/14",
+            "Lecture": f"Écart de {grade_delta:+.1f} vs grade moyen local",
+        },
+        {
+            "Facteur": "Condition",
+            "Score": f"{component_scores['Condition']:.1f}/10",
+            "Lecture": f"Écart de {condition_delta:+.1f} vs condition moyenne locale",
+        },
+        {
+            "Facteur": "Rénovation",
+            "Score": f"{component_scores['Rénovation']:.1f}/10",
+            "Lecture": "Maison rénovée" if property_row["is_renovated"] else "Maison non rénovée",
+        },
+        {
+            "Facteur": "Front de mer",
+            "Score": f"{component_scores['Front de mer']:.1f}/10",
+            "Lecture": "Atout waterfront" if property_row["waterfront"] == 1 else "Sans frontage waterfront",
+        },
+    ]
+
+    return {
+        "total_score": total_score,
+        "score_label": score_label,
+        "component_scores": component_scores,
+        "detail_frame": pd.DataFrame(detail_rows),
+        "ppsf_gap_pct": ppsf_gap_pct,
+    }
 
 
 def render_comparables_analysis(property_row: pd.Series, comparables: pd.DataFrame) -> tuple[float | None, float | None, str]:
@@ -1092,6 +1180,30 @@ def render_comparables_analysis(property_row: pd.Series, comparables: pd.DataFra
     return mean_comp_price, price_gap_pct, pricing_status
 
 
+def render_investment_score(score_data: dict[str, object]) -> None:
+    st.subheader("Score d'attractivité investissement")
+
+    total_score = score_data["total_score"]
+    score_label = score_data["score_label"]
+    component_scores = score_data["component_scores"]
+    ppsf_gap_pct = score_data["ppsf_gap_pct"]
+    detail_frame = score_data["detail_frame"].copy()
+
+    top_metrics = st.columns(4)
+    top_metrics[0].metric("Score total", f"{total_score}/100")
+    top_metrics[1].metric("Lecture", score_label)
+    top_metrics[2].metric("Prix vs comps", f"{component_scores['Prix vs comps']:.1f}/32")
+    top_metrics[3].metric("Prix/pi² vs comps", f"{ppsf_gap_pct:+.1f}%")
+
+    st.progress(total_score / 100)
+    st.caption(
+        "Lecture simple de l'attractivité basée sur le positionnement prix, le prix au pi², "
+        "la qualité du bien et quelques attributs différenciants."
+    )
+
+    st.table(detail_frame)
+
+
 def plot_property_vs_comparables(property_row: pd.Series, comparables: pd.DataFrame) -> plt.Figure:
     plot_frame = comparables.head(9).copy()
     plot_frame["label"] = [f"Comp {index + 1}" for index in range(len(plot_frame))]
@@ -1138,6 +1250,7 @@ def build_property_prompt(
     mean_comp_price: float,
     price_gap_pct: float,
     pricing_status: str,
+    investment_score: dict[str, object],
 ) -> str:
     price_gap = property_row["price"] - mean_comp_price
     renovated = "Oui" if property_row["is_renovated"] else "Non"
@@ -1166,6 +1279,16 @@ ANALYSE COMPARATIVE :
 - Prix moyen par pi² des comparables : {comparables['price_per_sqft'].mean():,.0f} $
 - Grade moyen des comparables : {comparables['grade'].mean():.1f}
 - Condition moyenne des comparables : {comparables['condition'].mean():.1f}
+
+SCORE D'ATTRACTIVITÉ INVESTISSEMENT :
+- Score total : {investment_score['total_score']}/100
+- Lecture : {investment_score['score_label']}
+- Prix vs comps : {investment_score['component_scores']['Prix vs comps']:.1f}/32
+- Prix/pi² vs comps : {investment_score['component_scores']['Prix/pi² vs comps']:.1f}/24
+- Grade : {investment_score['component_scores']['Grade']:.1f}/14
+- Condition : {investment_score['component_scores']['Condition']:.1f}/10
+- Rénovation : {investment_score['component_scores']['Rénovation']:.1f}/10
+- Front de mer : {investment_score['component_scores']['Front de mer']:.1f}/10
 
 Rédige une recommandation d'investissement en 3 à 4 paragraphes.
 Inclus : évaluation du prix, forces et faiblesses, principaux risques,
@@ -1321,6 +1444,16 @@ def render_property_tab(dataframe: pd.DataFrame, filters: dict[str, object]) -> 
             selected_property, comparables
         )
 
+    investment_score = None
+    if not comparables.empty and price_gap_pct is not None:
+        with st.container(border=True):
+            investment_score = compute_investment_score(
+                property_row=selected_property,
+                comparables=comparables,
+                price_gap_pct=price_gap_pct,
+            )
+            render_investment_score(investment_score)
+
     if not comparables.empty:
         render_chart_card(
             "Visualisation comparative",
@@ -1328,7 +1461,7 @@ def render_property_tab(dataframe: pd.DataFrame, filters: dict[str, object]) -> 
             plot_property_vs_comparables(selected_property, comparables),
         )
 
-    if comparables.empty or mean_comp_price is None or price_gap_pct is None:
+    if comparables.empty or mean_comp_price is None or price_gap_pct is None or investment_score is None:
         st.info("Une recommandation LLM nécessite au moins un comparable valide.")
         return
 
@@ -1338,6 +1471,7 @@ def render_property_tab(dataframe: pd.DataFrame, filters: dict[str, object]) -> 
         mean_comp_price=mean_comp_price,
         price_gap_pct=price_gap_pct,
         pricing_status=pricing_status,
+        investment_score=investment_score,
     )
     property_signature = hashlib.md5(property_prompt.encode("utf-8")).hexdigest()
 
