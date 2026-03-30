@@ -132,6 +132,38 @@ def inject_custom_styles() -> None:
             color: #F9F5ED !important;
         }
 
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea,
+        [data-testid="stSidebar"] select {
+            accent-color: var(--sand) !important;
+        }
+
+        [data-testid="stSidebar"] .stMultiSelect [data-baseweb="tag"] {
+            background: rgba(245, 239, 229, 0.16) !important;
+            border: 1px solid rgba(245, 239, 229, 0.28) !important;
+            color: #F9F5ED !important;
+        }
+
+        [data-testid="stSidebar"] .stMultiSelect [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div {
+            background: rgba(245, 239, 229, 0.08) !important;
+            border-color: rgba(245, 239, 229, 0.18) !important;
+        }
+
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] [role="slider"] {
+            background: var(--sand) !important;
+            border-color: var(--sand) !important;
+            box-shadow: 0 0 0 1px rgba(245, 239, 229, 0.5) !important;
+        }
+
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div > div > div {
+            background: rgba(245, 239, 229, 0.34) !important;
+        }
+
+        [data-testid="stSidebar"] .stCheckbox input {
+            accent-color: var(--sand) !important;
+        }
+
         .hero-banner {
             position: relative;
             overflow: hidden;
