@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 from html import escape
@@ -26,6 +27,9 @@ ENV_PATH = BASE_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 DATA_PATH = BASE_DIR / "kc_house_data.csv"
+ASSETS_DIR = BASE_DIR / "assets"
+MARKET_BANNER_PATH = ASSETS_DIR / "market-banner.png"
+PROPERTY_BANNER_PATH = ASSETS_DIR / "property-banner.png"
 APP_TITLE = "Analyseur Immobilier - Comté de King"
 PALETTE = {
     "ink": "#17313E",
@@ -174,6 +178,21 @@ def inject_custom_styles() -> None:
             color: #FBF7F1;
             box-shadow: 0 22px 50px rgba(23, 49, 62, 0.18);
             margin-bottom: 1.4rem;
+        }
+
+        .tab-banner-shell {
+            padding: 0.42rem;
+            border-radius: 30px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.74) 0%, rgba(248,242,233,0.8) 100%);
+            border: 1px solid rgba(23, 49, 62, 0.08);
+            box-shadow: 0 18px 38px rgba(23, 49, 62, 0.08);
+            margin-bottom: 1rem;
+        }
+
+        .tab-banner {
+            width: 100%;
+            display: block;
+            border-radius: 24px;
         }
 
         .hero-banner::after {
@@ -542,6 +561,22 @@ def render_llm_intro(title: str, description: str) -> None:
         f"""
         <div class="llm-badge">{escape(title)}</div>
         <p class="llm-copy">{escape(description)}</p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_tab_banner(image_path: Path, alt_text: str) -> None:
+    if not image_path.exists():
+        return
+
+    image_bytes = image_path.read_bytes()
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    st.markdown(
+        f"""
+        <div class="tab-banner-shell">
+            <img class="tab-banner" src="data:image/png;base64,{image_base64}" alt="{escape(alt_text)}" />
+        </div>
         """,
         unsafe_allow_html=True,
     )
@@ -1149,6 +1184,10 @@ def render_market_tab(filtered: pd.DataFrame, filters: dict[str, object]) -> Non
         "Tes réponses doivent être structurées, nuancées, concises et orientées investissement."
     )
 
+    render_tab_banner(
+        MARKET_BANNER_PATH,
+        "Illustration du marché immobilier avec graphiques et maisons stylisées",
+    )
     render_section_intro(
         "Vision segmentée",
         "Exploration du marché",
@@ -1259,6 +1298,10 @@ def render_property_tab(dataframe: pd.DataFrame, filters: dict[str, object]) -> 
         "Tes réponses doivent être structurées, nuancées, concises et orientées investissement."
     )
 
+    render_tab_banner(
+        PROPERTY_BANNER_PATH,
+        "Illustration de l'analyse d'une propriété avec loupe et comparables",
+    )
     render_section_intro(
         "Étude ciblée",
         "Analyse d'une propriété",
